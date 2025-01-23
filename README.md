@@ -6,7 +6,7 @@
 
 **Last Updated**: 2025-01-23
 
-**Language**: C/C++/Python
+**Language**: C/Python
 
 **Target Platform**: Raspberry Pi Zero 2W -> 64-bit Raspberry Pi OS Lite
 
