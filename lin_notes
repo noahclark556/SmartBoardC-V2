@@ -1,0 +1,43 @@
+# May not need to do this. See good boot config.
+
+sudo apt install -y libsdl2-dev libsdl2-ttf-dev libsdl2-gfx-dev libsdl2-image-dev libcurl4-openssl-dev libcjson-dev build-essential
+
+sudo nano /etc/apt/sources.list
+uncommemnt deb-src
+sudo apt update
+
+sudo adduser noahclark556 input
+
+# install everything Debian uses to build SDL
+sudo apt build-dep libsdl2
+
+# needed for the KMSDRM backend:
+sudo apt install libdrm-dev libgbm-dev
+
+wget https://www.libsdl.org/release/SDL2-2.30.11.tar.gz
+tar -xvf SDL2-2.30.11.tar.gz
+cd SDL2-2.30.11
+./configure --enable-video-kmsdrm
+make -j4 && sudo make install
+
+
+
+NOTE: Video Drivers List:
+dummy offscreen x11(dynamic) kmsdrm(dynamic) opengl opengl_es1 opengl_es2 vulkan wayland(dynamic)
+
+Buidl with debug symbols
+gcc -g -o sb_app $(find . -name "*.c") $(sdl2-config --cflags --libs) -lSDL2_ttf -lSDL2_gfx -lcurl -lcjson -lSDL2_image -v
+gdb sb_app
+run
+when error occurs, run:
+backtrace
+
+
+
+hdmi_force_hotplug=1
+hdmi_group=2
+hdmi_mode=87
+hdmi_cvt=1024 600 60 6
+dtoverlay=vc4-kms-v3d
+gpu_mem=128
+#disable_fw_kms_setup=1
