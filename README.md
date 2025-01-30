@@ -6,7 +6,7 @@
 
 **Last Updated**: 2025-01-23
 
-**Language**: C/C++/Python
+**Language**: C/Python
 
 **Target Platform**: Raspberry Pi Zero 2W -> 64-bit Raspberry Pi OS Lite
 
@@ -19,7 +19,7 @@ This is a custom "operating system" written in C intended for use with the Raspb
 
 The entirety of the UI and API calls are written in C. The only exception is the voice daemon which is written in Python. The voice daemon is compiled into an executable for the target platform and is started as a subprocess during the OS initialization process.
 
-The voice daemon will listen for the key phrase "hey smart board". When the key phrase is detected, the daemon will write a command to a file called vdout.qdll. The main application is actively listening for changes to that file, when a change is detected, it will read the command and execute code accordingly (change window view, get weather, etc). These commands are fully customizable, for example, I could add a command that sends some voltage to a GPIO pin on the RPI and turn on a light.
+The voice daemon will listen for the key phrase "hey smart board". When the key phrase is detected, the daemon will write a command to a file called vdout.qdll. The main application is actively listening for changes to that file, when a change is detected, it will read the command and execute code accordingly (change window view, get weather, etc). These commands are fully customizable, for example, I could add a command that sends some voltage to a GPIO header on the RPI and turn on a light.
 
 It is HIGHLY recommended to use the Jabra Speak 510 for the microphone and speaker. It is a bluetooth and usb device that connects to the RPI and is very easy to setup. It can pickup voice commands from far away and has a very good speaker. It can be expensive, but I got a used one on ebay for $30 that works great.
 
