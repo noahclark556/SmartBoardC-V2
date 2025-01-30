@@ -1,3 +1,5 @@
+# If you're seeing this in github, you can ignore this entire file. Everything you need is in the README.md, these are scratch notes from dev that I included in case.
+
 # Smart Board OS
 
 ## Mac Development Setup
