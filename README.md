@@ -12,7 +12,7 @@
 
 **Development Environment**: macOS Sequoia 15.2, MacBook M2 Pro 2023 14-inch
 
-**External Hardware**: Mini USB Microphone, Micro USB to USB 2.0 Cable/Adapter, HDMI Mini to HDMI Cable/Adapter, LCD Panel w/supporting controller. 
+**External Hardware**: Jabra Speak 510 (Mic and Speaker), Micro USB to USB 2.0 Cable/Adapter, HDMI Mini to HDMI Cable/Adapter, LCD Panel w/supporting controller. 
 
 ## Description
 This is a custom "operating system" written in C intended for use with the Raspberry Pi Zero 2W and all newer models that support Raspberry Pi OS Lite (or most lite linux distros). This project uses SDL2 for graphics with the vc4-kms-v3d driver which is a kernel mode setting / 3D graphics driver, as part of the modern linux kernels direct rendering manager stack. 
@@ -20,6 +20,8 @@ This is a custom "operating system" written in C intended for use with the Raspb
 The entirety of the UI and API calls are written in C. The only exception is the voice daemon which is written in Python. The voice daemon is compiled into an executable for the target platform and is started as a subprocess during the OS initialization process.
 
 The voice daemon will listen for the key phrase "hey smart board". When the key phrase is detected, the daemon will write a command to a file called vdout.qdll. The main application is actively listening for changes to that file, when a change is detected, it will read the command and execute code accordingly (change window view, get weather, etc). These commands are fully customizable, for example, I could add a command that sends some voltage to a GPIO pin on the RPI and turn on a light.
+
+It is HIGHLY recommended to use the Jabra Speak 510 for the microphone and speaker. It is a bluetooth and usb device that connects to the RPI and is very easy to setup. It can pickup voice commands from far away and has a very good speaker. It can be expensive, but I got a used one on ebay for $30 that works great.
 
 ## Intent and Predecessors
 This project has been ongoing and is considered to be Version 2 of the Smart Board OS. Version 1 was written in Flutter as a Web App. The Web App would load on boot and run in the minimal chromium browser on RPI OS Lite. That version worked well, but only on the newer (and larger) Raspberry Pi models. My goal was for this project to be compact, so in order to make the OS run smoothly on the smaller RPI Zero 2W, I had to write the OS in C and manage memory manually.
@@ -159,6 +161,28 @@ pip install --break-system-packages simpleaudio
 pip install --break-system-packages openai
 sudo apt-get install flac
 ```
+
+### Setup Jabra Speak 510
+List recording & playback devices, note device number:
+```bash
+arecord -l (List recording devices)
+aplay -l (List playback devices)
+```
+
+Edit /etc/asound.conf to match the device number:
+```bash
+sudo nano /etc/asound.conf
+defaults.pcm.card 1
+defaults.ctl.card 1
+defaults.pcm.device 0
+```
+
+Restart alsa:
+```bash
+sudo systemctl restart alsa-restore
+```
+
+Note: voice_daemon.py has an API call to cloud text to speech, the sample rate is set to 16000 which is required for the Jabra Speak 510 to play back the audio.
 
 ### Transfer Source Code from macOS to Raspberry Pi
 On your Mac, navigate to the root directory of the project and run:

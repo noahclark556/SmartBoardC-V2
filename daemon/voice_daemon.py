@@ -22,8 +22,10 @@ prepend = "VDaemon ->"
 output_file = "vdout.qdll"
 fullresponse = ""
 response_output_file = "response.qdll"
-p_threshold = 1.2
-newline_padding = 80 # \n after every x characters
+p_threshold = .8
+# Line break after x characters
+# 80 in dev, 100 on rpi
+newline_padding = 80
 
 if COMPILED:
     print(f"{prepend} Using compiled output file")
@@ -53,7 +55,8 @@ def speak(text):
         "audioConfig": {
             "audioEncoding": "LINEAR16",
             "speakingRate": 1.2,
-            "pitch": 0.5
+            "pitch": 0.5,
+            "sampleRateHertz": 16000
         }
     }
 
@@ -71,11 +74,11 @@ def speak(text):
                 audio_data = base64.b64decode(audio_content)
 
                 # Write to a temporary MP3 file
-                with open('output.mp3', 'wb') as audio_file:
+                with open('output.wav', 'wb') as audio_file:
                     audio_file.write(audio_data)
 
                 # Play the MP3 file
-                wave_obj = sa.WaveObject.from_wave_file('output.mp3')
+                wave_obj = sa.WaveObject.from_wave_file('output.wav')
                 play_obj = wave_obj.play()
                 play_obj.wait_done()  # Wait for playback to finish
                 speaking = False

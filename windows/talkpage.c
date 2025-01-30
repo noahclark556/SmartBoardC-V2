@@ -29,10 +29,10 @@ void talkPage(SDL_Renderer *renderer)
 {
     if (responseText != NULL)
     {
-        renderMultilineText(responseText, 0, 200, renderer, fontXSmall, textColorBlack);
+        renderMultilineText(responseText, 0, 200, renderer, fontSmallMedium, textColorBlack); //fontXSmall in dev, fontSmallMedium on rpi
     }
     else
     {
-        renderText("No response available", 0, 200, renderer, fontXSmall, textColorBlack, 0, 0);
+        renderText("No response available", 0, 200, renderer, fontSmallMedium, textColorBlack, 0, 0);
     }
 }
