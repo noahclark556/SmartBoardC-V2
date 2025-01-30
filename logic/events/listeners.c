@@ -173,6 +173,8 @@ void initVoiceListener(void)
 void start_voice_daemon(void)
 {
     printf("Starting voice daemon\n");
+    remove(RESPONSE_FILE);
+    remove(COMMAND_FILE);
     voice_daemon_pid = fork();
     if (voice_daemon_pid < 0)
     {

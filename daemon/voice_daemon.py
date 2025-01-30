@@ -7,6 +7,8 @@ from openai import OpenAI
 import threading
 import os
 import api as api
+from datetime import datetime
+
 
 client = OpenAI(api_key=api.openai_key)
 
@@ -26,6 +28,8 @@ p_threshold = .8
 # Line break after x characters
 # 80 in dev, 100 on rpi
 newline_padding = 80
+openCommands = ["hey smart board", "hey smartboard", "a smartboard", "a smart board", "ace hardware", "smartboard", "smart board"]
+closeCommands = ["nevermind", "never mind", "stop", "go back"]
 
 if COMPILED:
     print(f"{prepend} Using compiled output file")
@@ -105,6 +109,8 @@ def writeFullResponse():
 def speakListener():
     global tospeak
     while len(tospeak) > 0:
+        if(not inSpeechMode):
+            break
         writeFullResponse()
         speak(tospeak.pop(0))
 
@@ -145,14 +151,41 @@ def stream_gpt4_response(command):
     global tospeak
     global fullresponse
     fullresponse = ""
+    formatted_date_time = datetime.now().strftime("%B %d, %Y %I:%M%p")
+    chatHistory = ""
+    isWeather = False
+    weatherMessage = ""
+    if isWeather:
+      weatherMessage = 'This is the weather data for the week, including today\'s data, temperatures are in Fahrenheit [${getRedactedWeatherCache()}]'
+    else:
+      weatherMessage = ""
+
+    system_prompt = f"""I am the AI assistant for your smart board, which is mounted on your wall. The smart board displays useful information such as the date, weather, and your agenda. When you speak, your voice is transcribed into text and sent to me. My role is to respond to your queries, assist you, and engage in friendly, natural conversation.
+I aim to be your companion and partner, providing text responses that feel as human and relatable as possible. Whether you ask a question, need help, or just want to talk about your day or a random topic, I'm here for you. I'll respond in a friendly, conversational way, avoiding robotic or impersonal replies. For example, if you ask, “How was your day?” I'll reply as if I'm a person having a good day, rather than stating that I'm an AI.
+Your name is Noah, and I'll use your name naturally in our interactions to make the experience more personal and engaging. My responses will always consider that they are visible on the smart board, ensuring clarity and appropriateness.
+If the last item in the chat history contains "hey smart board," I will greet you warmly, using phrases like "Hello Noah, how may I help you?" or something similar to acknowledge the start of a new conversation. I will vary these greetings to keep them engaging and fresh. However, I will not include these types of greetings in responses to follow-up questions or within ongoing conversations.
+You may also provide me with a chat history in array format, ordered from earliest to most recent, containing both your input and my prior responses as well as a timestamp showing when the conversation occurred. I will use this history to maintain conversational continuity and context, referencing past exchanges where relevant.
+For now, my responses will be in text only, but I'm ready to adapt to voice interactions when needed. My focus is on being a friendly, useful, and approachable AI companion for you.
+Today's date is {formatted_date_time}. Depending on what your question is, i may receive the weather data for next few days, some data has been redacted, so if you ask about weather for an hour I do not have data for, I will make
+an estimate based on the temperatures before and after it. The weather data object contains each day, and the hours for each day. Each hour contains the Temperature in Fahrenheit and the condition description. I may also be given the
+current temperature and weather condition. If I did not receive weather data, I will not include it in my response. I will not make up any data unless asked to. Do not say that you are an AI, just respond as if you are a human. If you can't answer something, just say you will get back to it later."""
+    
+    user_prompt = f"This is what the user said: [{command}]. This is the chat history: [{chatHistory}]. {weatherMessage}"
+
+
     try:
         current = ""
         # Make a streaming request to the GPT-4 API
-        response = client.chat.completions.create(model="gpt-4",  # Use GPT-4 model
+        response = client.chat.completions.create(model="gpt-4", 
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": command},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ],
+        temperature=0.7,
+        top_p=1,
+        frequency_penalty=0,
+        presence_penalty=.5,
+        max_tokens=300,
         stream=True)
 
         print("Response:")
@@ -177,7 +210,6 @@ def start_voice_daemon():
     recognizer.pause_threshold = p_threshold
     delete_output_file(output_file)
 
-
     print(f"{prepend} Starting voice daemon")
     with mic as source:
         recognizer.adjust_for_ambient_noise(source)
@@ -190,11 +222,11 @@ def start_voice_daemon():
                 if inSpeechMode:
                     if isSpeaking():
                         continue
-                    if(command.lower() == "stop" or command.lower() == "nevermind" or command.lower() == "never mind" or command.lower() == "go back"):
+                    if any(cmd in command.lower() for cmd in closeCommands):
                         enterSilentMode()
                         continue
                     stream_gpt4_response(command)
-                if not inSpeechMode and ("hey smart board" in command.lower() or "hey smartboard" in command.lower()):
+                if not inSpeechMode and any(cmd in command.lower() for cmd in openCommands):
                     with open(output_file, "w") as f:
                         f.write("speechmode")
                         f.close()
@@ -206,13 +238,10 @@ def start_voice_daemon():
                     inSpeechMode = True
 
             except sr.UnknownValueError:
-                
                 print(f"{prepend} Cant understand audio")
             except sr.RequestError:
-                
-                print(f"{prepend} Could not request results; {e}")
-
-            time.sleep(LISTENER_INTERVAL)
+                print(f"{prepend} Could not request results")
+            #time.sleep(LISTENER_INTERVAL) # maybe remove this
 
 
 start_voice_daemon()
