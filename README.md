@@ -2,11 +2,9 @@
 
 **Written by**: Noah Clark 
 
-**Date Created**: 2024-06-01
+**Last Updated**: 2025-02-02
 
-**Last Updated**: 2025-01-29
-
-**Language**: C/Python
+**Language**: C/C++/Python
 
 **Target Platform**: Raspberry Pi Zero 2W -> 64-bit Raspberry Pi OS Lite
 
@@ -19,20 +17,32 @@ This is a custom "operating system" written in C intended for use with the Raspb
 
 The entirety of the UI and API calls are written in C. The only exception is the voice daemon which is written in Python. The voice daemon is compiled into an executable for the target platform and is started as a subprocess during the OS initialization process.
 
-The voice daemon will listen for the key phrase "hey smart board". When the key phrase is detected, the daemon will write a command to a file called vdout.qdll. The main application is actively listening for changes to that file, when a change is detected, it will read the command and execute code accordingly (change window view, get weather, etc). These commands are fully customizable, for example, I could add a command that sends some voltage to a GPIO header on the RPI and turn on a light.
+The voice daemon will listen for the key phrase "hey smart board". When the key phrase is detected, the daemon will write a command to a file called vdout.qdll. The main application is actively listening for changes to that file, when a change is detected, it will read the command and execute code accordingly (change window view, get weather, etc). These commands are fully customizable, for example, I could add a command that sends some voltage to a GPIO pin on the RPI and turn on a light.
 
-It is HIGHLY recommended to use the Jabra Speak 510 for the microphone and speaker. It is a bluetooth and usb device that connects to the RPI and is very easy to setup. It can pickup voice commands from far away and has a very good speaker. It can be expensive, but I got a used one on ebay for $30 that works great.
+This application is designed to run on the Raspberry Pi Zero 2W (and most other models), but has been built to be cross platform between Mac (for development) and Linux (for production and/or development).
 
 ## Intent and Predecessors
 This project has been ongoing and is considered to be Version 2 of the Smart Board OS. Version 1 was written in Flutter as a Web App. The Web App would load on boot and run in the minimal chromium browser on RPI OS Lite. That version worked well, but only on the newer (and larger) Raspberry Pi models. My goal was for this project to be compact, so in order to make the OS run smoothly on the smaller RPI Zero 2W, I had to write the OS in C and manage memory manually.
 
 ## Initial Setup For Development
-- [ ] In "/config" create a file called "api.h" and add the following:
+- [ ] For development, you can get this booted on a MacOS, and probably a Windows machine as well with some fiddling. But it's intent is to be run on Raspberry Pi OS Lite (64-bit). So I recommend getting that all set up.
+
+- [ ] In the "/config" directory, modify the file called "api.h" and add the following values:
 ```
-#define FUNCTION_URL "BELOW_DATABASE_FUNCTION_URL_HERE"
+#define OPENAI_API_KEY "OPENAI_API_KEY_HERE"
+#define GOOGLE_API_KEY "GOOGLE_TTS_API_KEY_HERE"
+#define READ_DB_FUNCTION_URL "DATABASE_READ_FUNCTION_URL_HERE"
+#define UPDATE_DB_FUNCTION_URL "DATABASE_UPDATE_FUNCTION_URL_HERE"
+#define DB_USER_ID "USER_ID_HERE" // The document id of the user in the users collection
 ```
-- [ ] Create a google cloud function, linked to a firebase database, using the following:
+- [ ] In the "/config" directory, you can modify the file called "cfg.h" to change the default user name, or other configurations:
+but this is not required for the project to boot. I recommend adjusting that file once you get the project running.
+
+- [ ] Create two google cloud functions, linked to a firebase database, using the following:
 ```
+import { onRequest } from "firebase-functions/v2/https";
+import { db } from './admin'; // Your firestore admin initialization
+
 export const getSBData = onRequest(async (req, res) => {
     const { userId } = req.body || {};
     try {
@@ -41,22 +51,50 @@ export const getSBData = onRequest(async (req, res) => {
         if (userSnap.exists) {
             const userData = userSnap.data();
             if (userData) {
-                res.json(userData); // Send the user data as a JSON response
-                return; // Ensure no further code is executed
+                res.json(userData);
+                return;
             }
         }
-        // If user does not exist, return a default response
         res.json({ agendas: {}, history: [], note: "" });
     } catch (e) {
         console.error("Error fetching user data:", e);
-        res.status(500).json({ error: "Internal Server Error" }); // Send an error response
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+export const updateSBHistory = onRequest(async (req, res) => {
+    const { userId, newHistory } = req.body || {};
+
+    if (!userId || !newHistory) {
+        res.status(400).json({ error: "Missing userId or newHistory" });
+        return;
+    }
+
+    try {
+        const usersRef = db.collection("users").doc(userId);
+        const userSnap = await usersRef.get();
+
+        if (!userSnap.exists) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+
+        const userData = userSnap.data();
+        const history = userData?.history || [];
+        history.push(newHistory);
+        await usersRef.update({ history });
+
+        res.json({ success: true, updatedHistory: history });
+    } catch (e) {
+        console.error("Error updating history:", e);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
 ```
 - [ ] Create a firestore database in this format:
 ```
-users(collection):
-  userId(document):
+users(a collection named users):
+  userId(a document matching the DB_USER_ID in api.h):
     agendas<Map<Map<String, String>>>: // Manually insert data 
       ex: 
         {
@@ -70,20 +108,15 @@ users(collection):
     history<Array<String>>: // Auto updated by the program
     note<String>: // Manually insert data 
 ```
-- [ ] Modify or Add /daemon/api.py and add the following:
-```
-openai_key = "OPENAI_KEY_HERE" // for openai backend
-google_api_key = "GOOGLE_API_KEY_HERE" // for text to speech
-```
 ---
 
-## Todos:
+## Todos (These haven't been updated in a while):
 ### ASAP - (Pressing to ensure core functionality)
-- [ ] Handle response text overflow.
-- [ ] Too much database data causes the program to crash, especially on linux.
-- [ ] Add follow on listening for after "hey smart board"
-   - [ ] Ensure timer has started to detect if user is done speaking.
-   - [ ] Add filter to ensure bogus words / background noise is not detected.
+- [X] Handle response text overflow.
+- [X] Too much database data causes the program to crash, especially on linux.
+- [X] Add follow on listening for after "hey smart board"
+   - [X] Ensure timer has started to detect if user is done speaking.
+   - [X] Add filter to ensure bogus words / background noise is not detected.
 ### Future - (Not Pressing)
 - [ ] Switch things in cfg.h to use define, and move things out that shouldn't be for configuration.
 - [ ] Let the RPI draw power from the LCD controller, eliminating the need for a separate power cable.
@@ -162,7 +195,7 @@ pip install --break-system-packages openai
 sudo apt-get install flac
 ```
 
-### Setup Jabra Speak 510
+### Setup Jabra Speak 510 (The below config is specific to the Jabra Speak 510, other devices may require different configurations)
 List recording & playback devices, note device number:
 ```bash
 arecord -l (List recording devices)

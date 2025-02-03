@@ -65,7 +65,6 @@ WeatherData parseWeatherData(const char *json)
             weatherData.hourly[i].date = strdup(timeItem->valuestring); 
         }
     }
-
     cJSON_Delete(root);
     return weatherData;
 }
@@ -101,13 +100,13 @@ WeatherData requestWeather(void)
 
     return wd;
 }
-// For passing to GPT API later on
-WeatherData trimWeatherData(const WeatherData *original)
-{
-    size_t newCount = (original->hourly_count + 1) / 2;
-    HourlyWeather *trimmedHourly = malloc(newCount * sizeof(HourlyWeather));
 
-    for (size_t i = 0, j = 0; i < original->hourly_count; i += 2, j++)
+WeatherData trimWeatherData(const WeatherData *original, size_t increment)
+{
+    size_t newCount = (original->hourly_count + 1) / increment;
+    HourlyWeather *trimmedHourly = malloc(newCount * sizeof(HourlyWeather));
+    printf("New count: %zu\n", newCount);
+    for (size_t i = 0, j = 0; i < original->hourly_count; i += increment, j++)
     {
         trimmedHourly[j].temperature = original->hourly[i].temperature;
         trimmedHourly[j].weather_code = original->hourly[i].weather_code;
@@ -118,22 +117,33 @@ WeatherData trimWeatherData(const WeatherData *original)
     return trimmedData;
 }
 
-char *weatherDataToString(const WeatherData *data)
-{
-    size_t bufferSize = 1024;
-    char *buffer = malloc(bufferSize);
-    buffer[0] = '\0';
+char *weatherDataToString(const WeatherData *data) {
+    if (data == NULL || data->hourly == NULL || data->hourly_count == 0) {
+        return NULL;
+    }
 
-    for (size_t i = 0; i < data->hourly_count; i++)
-    {
-        char entry[128];
+    size_t bufferSize = 2048;
+    char *buffer = malloc(bufferSize);
+    if (buffer == NULL) {
+        fprintf(stderr, "Failed to allocate memory for buffer.\n");
+        return NULL;
+    }
+    buffer[0] = '\0';
+    printf("Hourly count: %zu\n", data->hourly_count);
+    for (size_t i = 0; i < data->hourly_count; i++) {
+        char entry[256];
         snprintf(entry, sizeof(entry), "Date: %s, Temp: %.2f, Code: %.2f\n",
                  data->hourly[i].date, data->hourly[i].temperature, data->hourly[i].weather_code);
-
-        if (strlen(buffer) + strlen(entry) + 1 > bufferSize)
-        {
+        
+        if (strlen(buffer) + strlen(entry) + 1 > bufferSize) {
             bufferSize *= 2;
-            buffer = realloc(buffer, bufferSize);
+            char *newBuffer = realloc(buffer, bufferSize);
+            if (newBuffer == NULL) {
+                fprintf(stderr, "Failed to reallocate memory for buffer.\n");
+                free(buffer);
+                return NULL;
+            }
+            buffer = newBuffer; 
         }
 
         strcat(buffer, entry);
@@ -191,7 +201,6 @@ WeatherHighLows *parseHighLows(WeatherData weatherData, size_t *outCount)
     highLows[highLowsCount].high = dailyHigh;
     highLows[highLowsCount].low = dailyLow;
     highLowsCount++;
-
     *outCount = highLowsCount;
     return highLows;
 }
@@ -286,26 +295,25 @@ char *translateWeatherCode(double weatherCode)
     return "Clear";
 }
 
+void writeWeatherDataToFile(const WeatherData *data)
+{
+    FILE *file = fopen("./daemon/wd.qdll", "w");
+    if (file)
+    {
+        fprintf(file, "%s", weatherDataToString(data));
+        fclose(file);
+    }
+}
+
 void initializeWeather(void)
 {
-    // finish parse high lows
     WeatherData weatherData = requestWeather();
     globalWeatherData = parseHighLows(weatherData, &highLowsCount);
     currentTemperature = weatherData.current_temperature;
     currentWeatherCode = weatherData.current_weather_code;
-
-    // char *trimmedString = weatherDataToString(globalWeatherData);
-    // make sure to free this because it uses malloc
-    // printf("%s", trimmedString);
-    //  for (size_t i = 0; i < weatherData.hourly_count; i++)
-    // {
-    //     printf("Hour %zu: Temp: %.2f, Code: %.2f\n", i, weatherData.hourly[i].temperature, weatherData.hourly[i].weather_code);
-    //     printf("Date: %s\n", weatherData.hourly[i].date);
-    // }
-    // printf("Current Temperature: %.2f\n", weatherData.current_temperature);
-    // printf("Current Weather Code: %.2f\n", weatherData.current_weather_code);
-
-    //  free(weatherData.hourly);
+    printf("HighLows count: %zu\n", weatherData.hourly_count);
+    WeatherData trimmedData = trimWeatherData(&weatherData, 3);
+    writeWeatherDataToFile(&trimmedData);
 }
 
 void destroyWeatherData()

@@ -1,22 +1,34 @@
 import speech_recognition as sr
-import time
 import base64
 import requests
+import time
 import simpleaudio as sa
 from openai import OpenAI
 import threading
 import os
-import api as api
 from datetime import datetime
+import requests
+import json
+import argparse
+
+parser = argparse.ArgumentParser(description="SB Voice Daemon")
+parser.add_argument("--openai-api-key", type=str, help="OpenAI API Key")
+parser.add_argument("--google-api-key", type=str, help="Google TTS API Key")
+parser.add_argument("--db-read-function", type=str, help="URL for the database read function")
+parser.add_argument("--db-update-function", type=str, help="URL for the database update function")
+parser.add_argument("--db-user-id", type=str, help="Id of the user to read from / name of document in users collection")
+args = parser.parse_args()
 
 
-client = OpenAI(api_key=api.openai_key)
+client = OpenAI(api_key=args.openai_api_key)
 
 # If using python to start the daemon, set to compiled to 0
 COMPILED = True
 LISTENER_INTERVAL = .1 # Lower this to .5 (500ms) in production, maybe?
-api_key = api.google_api_key
-url = f'https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}'
+url = f'https://texttospeech.googleapis.com/v1/text:synthesize?key={args.google_api_key}'
+READ_FUNCTION_URL = args.db_read_function
+UPDATE_FUNCTION_URL = args.db_update_function
+DB_USER_ID = args.db_user_id
 inSpeechMode = False
 tospeak = []
 speaking = False
@@ -24,21 +36,27 @@ prepend = "VDaemon ->"
 output_file = "vdout.qdll"
 fullresponse = ""
 response_output_file = "response.qdll"
+weather_data_file = "wd.qdll"
 p_threshold = .8
 # Line break after x characters
 # 80 in dev, 100 on rpi
 newline_padding = 80
 openCommands = ["hey smart board", "hey smartboard", "a smartboard", "a smart board", "ace hardware", "smartboard", "smart board"]
 closeCommands = ["nevermind", "never mind", "stop", "go back"]
+weatherData = []
+max_history = 15
+trimmed_history = []
 
 if COMPILED:
     print(f"{prepend} Using compiled output file")
     output_file = "./daemon/vdout.qdll"
     response_output_file = "./daemon/response.qdll"
+    weather_data_file = "./daemon/wd.qdll"
 else:
     print(f"{prepend} Using uncompiled output file")
     output_file = "vdout.qdll"
     response_output_file = "response.qdll"
+    weather_data_file = "wd.qdll"
 
 def delete_output_file(output_file):
     if os.path.isfile(output_file):  # Check if the file exists
@@ -46,6 +64,59 @@ def delete_output_file(output_file):
         print(f"Deleted file: {output_file}")
     else:
         print(f"File not found: {output_file}")
+
+def commit_update_history(new_history):
+    headers = {"Content-Type": "application/json"}
+    data = json.dumps({
+        "userId": DB_USER_ID,
+        "newHistory": new_history
+    })
+
+    try:
+        response = requests.post(UPDATE_FUNCTION_URL, headers=headers, data=data)
+        response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
+        
+        json_data = response.json()
+        return json_data  # Returns the updated history response
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error updating history: {e}")
+        return None
+    
+def update_history(new_history):
+    print(f"Updating history")
+    threading.Thread(target=commit_update_history, args=(new_history,)).start()
+    print(f"History updated:")
+
+def parse_database_data():
+    global trimmed_history
+    headers = {"Content-Type": "application/json"}
+    data = json.dumps({"userId": DB_USER_ID})
+    json_data = {}
+    history_list = []
+    try:
+        response = requests.post(READ_FUNCTION_URL, headers=headers, data=data)
+        response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
+        json_data = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {e}")
+
+    if "history" in json_data and isinstance(json_data["history"], list):
+        history_items = json_data["history"]
+        
+        # Trim history if more than max_history
+        if len(history_items) > max_history:
+            history_items = history_items[-max_history:]
+        
+        history_list.extend(history_items)
+        trimmed_history = history_list
+    
+def initDatabase():
+    try:
+        threading.Thread(target=parse_database_data).start()
+    except Exception as e:
+        print(f"An error parsing database data: {e}")
+
 
 def speak(text):
     global speaking
@@ -99,7 +170,6 @@ def getLineParsedResponse():
     new_string = '\n'.join(noln[i:i+newline_padding] for i in range(0, len(noln), newline_padding))
     return new_string
     
-
 def writeFullResponse():
     res = getLineParsedResponse()
     with open(response_output_file, "w") as f:
@@ -138,7 +208,6 @@ def goBackListener():
         return
     timer = threading.Timer(7, enterSilentMode)
     timer.start()
-    
 
 def eos(text):
     chars_to_check = ['.', '!', '?', '...']
@@ -147,16 +216,20 @@ def eos(text):
             return True
     return False
 
+def checkIsWeather(command):
+    if "weather" in command.lower() or "temperature" in command.lower() or "temp" in command.lower():
+        return True
+    return False
+
 def stream_gpt4_response(command):
     global tospeak
     global fullresponse
     fullresponse = ""
     formatted_date_time = datetime.now().strftime("%B %d, %Y %I:%M%p")
-    chatHistory = ""
-    isWeather = False
+    isWeather = checkIsWeather(command)
     weatherMessage = ""
-    if isWeather:
-      weatherMessage = 'This is the weather data for the week, including today\'s data, temperatures are in Fahrenheit [${getRedactedWeatherCache()}]'
+    if isWeather and len(weatherData) > 0:
+      weatherMessage = f'This is the weather data for the week, including today\'s data, temperatures are in Fahrenheit [{weatherData}]'
     else:
       weatherMessage = ""
 
@@ -170,7 +243,7 @@ Today's date is {formatted_date_time}. Depending on what your question is, i may
 an estimate based on the temperatures before and after it. The weather data object contains each day, and the hours for each day. Each hour contains the Temperature in Fahrenheit and the condition description. I may also be given the
 current temperature and weather condition. If I did not receive weather data, I will not include it in my response. I will not make up any data unless asked to. Do not say that you are an AI, just respond as if you are a human. If you can't answer something, just say you will get back to it later."""
     
-    user_prompt = f"This is what the user said: [{command}]. This is the chat history: [{chatHistory}]. {weatherMessage}"
+    user_prompt = f"This is what the user said: [{command}]. This is the chat history: [{str(trimmed_history)}]. {weatherMessage}"
 
 
     try:
@@ -199,9 +272,33 @@ current temperature and weather condition. If I did not receive weather data, I 
                     speakListener()
                     current = ""
         print("\nStream finished.")
+        update_history(f"(user_speech:{command})(ai_response:{fullresponse})@{formatted_date_time}")
         goBackListener()
     except Exception as e:
         print(f"An error occurred: {e}")
+
+def setWeatherData():
+    global weatherData
+    for i in range(10):
+        with open(weather_data_file, "r") as f:
+            data = f.read()
+            f.close()
+        if len(data) > 5:
+            splitdata = data.split("\n")
+            newdata = []
+            for line in splitdata:
+                splitline = line.split(":")
+                if len(splitline) > 1:
+                    newdata.append(f"Date:{splitline[1].strip()} - Temp:{splitline[3].split(',')[0].strip()} - WeatherCode:{splitline[4].strip()}")
+            weatherData = newdata
+            break
+        time.sleep(2)
+
+def getWeatherData():
+    try:
+        threading.Thread(target=setWeatherData).start()
+    except Exception as e:
+        print(f"An error occurred getting weather data: {e}")
 
 def start_voice_daemon():
     global inSpeechMode
@@ -209,6 +306,8 @@ def start_voice_daemon():
     mic = sr.Microphone()
     recognizer.pause_threshold = p_threshold
     delete_output_file(output_file)
+    getWeatherData()
+    initDatabase()
 
     print(f"{prepend} Starting voice daemon")
     with mic as source:
@@ -245,4 +344,7 @@ def start_voice_daemon():
 
 
 start_voice_daemon()
+
+# For testing
+# inSpeechMode = True
 # stream_gpt4_response("Write me a 2 paragraph story?")

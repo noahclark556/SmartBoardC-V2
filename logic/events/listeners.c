@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "listeners.h"
 #include "../../config/cfg.h"
+#include "../../config/api.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -123,7 +124,7 @@ Uint32 checkForResponse(Uint32 interval, void *param)
 
             while (fgets(buffer, sizeof(buffer), file) != NULL)
             {
-                printf("Read line: %s", buffer);
+                // printf("Read line: %s", buffer);
                 size_t bufferLength = strlen(buffer);
 
                 if (totalLength + bufferLength >= BUFFER_SIZE)
@@ -184,7 +185,9 @@ void start_voice_daemon(void)
 
     if (voice_daemon_pid == 0)
     {
-        execl("./daemon/voice_daemon", "voice_daemon", (char *)NULL);
+        // execl("./daemon/voice_daemon", "voice_daemon", (char *)NULL);
+        execl("./daemon/voice_daemon", "voice_daemon", "--openai-api-key", OPENAI_API_KEY, "--google-api-key", GOOGLE_API_KEY, "--db-read-function", READ_DB_FUNCTION_URL, "--db-update-function", UPDATE_DB_FUNCTION_URL, "--db-user-id", DB_USER_ID, (char *)NULL);
+
 
         perror("Failed to exec voice_daemon");
         exit(EXIT_FAILURE);

@@ -6,8 +6,6 @@
 #include <SDL2/SDL_ttf.h>
 
 
-// extern int isFirstQuestion = 0;
-
 void talkPage(SDL_Renderer *renderer);
 
 #endif // TALKPAGE_H

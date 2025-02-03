@@ -17,6 +17,7 @@
 int cardWidth = 500;
 int cardHeight = 300;
 int cardSpacing = 100; 
+char username[32] = USER_FNAME_DEFAULT;
 
 void weatherCard(SDL_Renderer *renderer);
 void agendaCard(SDL_Renderer *renderer);
@@ -67,9 +68,6 @@ void renderDailyWeather(SDL_Renderer *renderer, int x, int y)
         {
 
             const char *dayOfWeek = getDayOfWeek(globalWeatherData[i].date);
-            
-            
-            
             char combinedText[100];
             snprintf(combinedText, sizeof(combinedText), "%.1f °F", globalWeatherData[i].high);
             renderText(dayOfWeek, x, y, renderer, fontMedium, textColorBlack, 0, 0);
@@ -178,7 +176,7 @@ void notesCard(SDL_Renderer *renderer)
 {
     int padV = 15;
     int padH = 0;
-    int index = 2; // This needs to match position of card in row
+    int index = 2;
     int totalWidth = 3 * cardWidth + 2 * cardSpacing;
     int startX = (windowWidth - totalWidth) / 2;
     int startY = (windowHeight - cardHeight) / 1.2;

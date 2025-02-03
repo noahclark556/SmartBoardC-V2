@@ -2,20 +2,17 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
-// Switch some things to define, using define basically means the preprocessor
-// will replace all references to defined name with the value at compile time
+// DONT EDIT THIS FILE: ONLY EDIT cfg.h and api.h
 
-int windowWidth = 1920;
-int windowHeight = 1080;
-int buttonsEnabled = 0;
+int windowWidth = WINDOW_WIDTH;
+int windowHeight = WINDOW_HEIGHT;
 char welcomeText[256];
 char * todText = "Afternoon";
-char username[32] = "Noah";
 char timeText[32] = "2:52 pm";
 char dateText[32] = "Fri, Jan 2";
 char *quoteText = "Any man who knows a thing, knows he knows nothing at all.";
 int quoteIndex = 0;
-int quoteAnimationInterval = 10000;
+int quoteAnimationInterval = QUOTE_ANIMATION_INTERVAL;
 int currentWindow = 0;
 
 const char *allQuotes[QUOTE_COUNT] = {
