@@ -15,7 +15,7 @@
 ## Description
 This is a custom "operating system" written in C intended for use with the Raspberry Pi Zero 2W and all newer models that support Raspberry Pi OS Lite (or most lite linux distros). This project uses SDL2 for graphics with the vc4-kms-v3d driver which is a kernel mode setting / 3D graphics driver, as part of the modern linux kernels direct rendering manager stack. This operating system also implements an IR remote control, so you can control the smart board with an IR remote.
 
-Please note that this project contains test information / location / names, etc. This is intentional for privacy reasons, nonetheless, all functionality is working as intended. Please modify the configs and code where needed to suit your own needs.
+Please note that this project contains false/test information / location / names, etc. This is intentional for privacy reasons, nonetheless, all functionality is working as intended. Please modify the configs and code where needed to suit your own needs.
 
 The entirety of the UI and API calls are written in C. The only exception is the voice daemon which is written in Python. The voice daemon is compiled into an executable for the target platform and is started as a subprocess during the OS initialization process.
 
