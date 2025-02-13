@@ -13,6 +13,7 @@ extern TTF_Font *fontXLarge;
 extern TTF_Font *fontLarge;
 extern TTF_Font *fontMedium;
 extern TTF_Font *fontSmallMedium;
+extern TTF_Font *fontSmallMid;
 extern TTF_Font *fontSmall;
 extern TTF_Font *fontXSmall;
 extern TTF_Font *fontXXSmall;
@@ -42,4 +43,8 @@ extern SDL_Texture *iconThunderTexture;
 
 extern SDL_Texture *agendaIconTexture;
 extern SDL_Texture *notesIconTexture;
+
+extern SDL_Texture *circleRedTexture;
+extern SDL_Texture *circleGreenTexture; 
+
 #endif // STYLE_H

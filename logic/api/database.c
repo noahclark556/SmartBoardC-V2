@@ -7,23 +7,31 @@
 #include "../../config/api.h"
 #include "../../config/cfg.h"
 
+#define INITIAL_BUFFER_SIZE 8096
 
 DatabaseData databaseData = {0};
+typedef struct {
+    char *data;
+    size_t size;
+} ResponseBuffer;
 
 // Function to handle the response data
-size_t DBWriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
+size_t DBWriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t totalSize = size * nmemb;
-    char **responsePtr = (char **)userp;
+    ResponseBuffer *buffer = (ResponseBuffer *)userp;
 
-    *responsePtr = realloc(*responsePtr, strlen(*responsePtr) + totalSize + 1);
-    if (*responsePtr == NULL)
-    {
-        fprintf(stderr, "Failed to allocate memory.\n");
-        return 0;
+    // Reallocate memory to fit new data
+    char *newData = realloc(buffer->data, buffer->size + totalSize + 1);
+    if (newData == NULL) {
+        fprintf(stderr, "Memory allocation failed in callback\n");
+        return 0;  // Returning 0 will cause curl to stop the request
     }
 
-    strncat(*responsePtr, contents, totalSize);
+    buffer->data = newData;
+    memcpy(&(buffer->data[buffer->size]), contents, totalSize);
+    buffer->size += totalSize;
+    buffer->data[buffer->size] = '\0';  // Null-terminate the string
+
     return totalSize;
 }
 
@@ -82,7 +90,6 @@ DatabaseData parseDatabaseData(const char *json)
         databaseData.agenda_count = index;
     }
 
-    // History is no longer used in the C side of the project. Instead, it is handled in the Python daemon to minimize memory usage.
     // cJSON *history = cJSON_GetObjectItem(root, "history");
     // if (history && cJSON_IsArray(history))
     // {
@@ -144,61 +151,60 @@ DatabaseData parseDatabaseData(const char *json)
 
 
 
-int syncDatabase()
-{
+int syncDatabase() {
     CURL *curl;
     CURLcode res;
-    char *response = malloc(4096);
-    if (response == NULL)
-    {
+
+    ResponseBuffer response = {malloc(INITIAL_BUFFER_SIZE), 0};
+    if (!response.data) {
         fprintf(stderr, "Memory allocation failed\n");
         return 1;
     }
-    response[0] = '\0';
+    response.data[0] = '\0';  // Ensure it's null-terminated
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
     curl = curl_easy_init();
-    if (curl)
-    {
+    if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, READ_DB_FUNCTION_URL);
 
         struct curl_slist *headers = NULL;
         headers = curl_slist_append(headers, "Content-Type: application/json");
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
+        // Create JSON request body
         cJSON *jsonBody = cJSON_CreateObject();
         cJSON_AddStringToObject(jsonBody, "userId", DB_USER_ID);
-        char *jsonString = cJSON_Print(jsonBody);
-
+        char *jsonString = cJSON_PrintUnformatted(jsonBody);  // More compact JSON output
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonString);
 
+        // Set up response handling
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, DBWriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
+        // Perform the request
         res = curl_easy_perform(curl);
-
-        if (res != CURLE_OK)
-        {
+        if (res != CURLE_OK) {
             fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-        }
-        else
-        {
-            cJSON *json = cJSON_Parse(response);
-            if (json)
-            {
-                parseDatabaseData(response);
+        } else {
+            cJSON *json = cJSON_Parse(response.data);
+            if (json) {
+                parseDatabaseData(response.data);
                 cJSON_Delete(json);
-            }
-            else
-            {
+            } else {
                 printf("JSON parsing error\n");
             }
         }
-        free(response);
+
+        // Cleanup
+        free(response.data);
+        free(jsonString);
+        cJSON_Delete(jsonBody);
         curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
-    }else{
-        free(response);
+    } else {
+        free(response.data);
     }
+
     curl_global_cleanup();
     return 0;
 }

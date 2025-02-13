@@ -2,7 +2,7 @@
 
 **Written by**: Noah Clark 
 
-**Last Updated**: 2025-02-02
+**Last Updated**: 2025-01-31
 
 **Language**: C/C++/Python
 
@@ -10,10 +10,12 @@
 
 **Development Environment**: macOS Sequoia 15.2, MacBook M2 Pro 2023 14-inch
 
-**External Hardware**: Jabra Speak 510 (Mic and Speaker), Micro USB to USB 2.0 Cable/Adapter, HDMI Mini to HDMI Cable/Adapter, LCD Panel w/supporting controller. 
+**External Hardware**: Jabra Speak 510 (Mic and Speaker), Micro USB to USB 2.0 Cable/Adapter, HDMI Mini to HDMI Cable/Adapter, LCD Panel w/supporting controller, IR Remote and IR receiver. 
 
 ## Description
-This is a custom "operating system" written in C intended for use with the Raspberry Pi Zero 2W and all newer models that support Raspberry Pi OS Lite (or most lite linux distros). This project uses SDL2 for graphics with the vc4-kms-v3d driver which is a kernel mode setting / 3D graphics driver, as part of the modern linux kernels direct rendering manager stack. 
+This is a custom "operating system" written in C intended for use with the Raspberry Pi Zero 2W and all newer models that support Raspberry Pi OS Lite (or most lite linux distros). This project uses SDL2 for graphics with the vc4-kms-v3d driver which is a kernel mode setting / 3D graphics driver, as part of the modern linux kernels direct rendering manager stack. This operating system also implements an IR remote control, so you can control the smart board with an IR remote.
+
+Please note that this project contains test information / location / names, etc. This is intentional for privacy reasons, nonetheless, all functionality is working as intended. Please modify the configs and code where needed to suit your own needs.
 
 The entirety of the UI and API calls are written in C. The only exception is the voice daemon which is written in Python. The voice daemon is compiled into an executable for the target platform and is started as a subprocess during the OS initialization process.
 
@@ -34,6 +36,8 @@ This project has been ongoing and is considered to be Version 2 of the Smart Boa
 #define READ_DB_FUNCTION_URL "DATABASE_READ_FUNCTION_URL_HERE"
 #define UPDATE_DB_FUNCTION_URL "DATABASE_UPDATE_FUNCTION_URL_HERE"
 #define DB_USER_ID "USER_ID_HERE" // The document id of the user in the users collection
+#define NEWS_API_URL "https://newsdata.io/api/1/latest?apikey=API_KEY_HERE&country=us&size=3&language=en"
+#define UPDATE_AGENDA_FUNCTION_URL "UPDATE_AGENDA_FUNCTION_URL_HERE"
 ```
 - [ ] In the "/config" directory, you can modify the file called "cfg.h" to change the default user name, or other configurations:
 but this is not required for the project to boot. I recommend adjusting that file once you get the project running.
@@ -87,6 +91,27 @@ export const updateSBHistory = onRequest(async (req, res) => {
         res.json({ success: true, updatedHistory: history });
     } catch (e) {
         console.error("Error updating history:", e);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+export const updateSBAgenda = onRequest(async (req, res) => {
+    const { userId, time, text, date } = req.body || {};
+
+    if (!userId || !time || !text || !date) {
+        res.status(400).json({ error: "Missing userId, time, text, or date" });
+        return;
+    }
+    try {
+        const usersRef = db.collection("users").doc(userId);
+
+        await usersRef.update({
+            [`agendas.${date}.${time}`]: text
+        });
+
+        res.json({ success: true, message: "Agenda updated successfully" });
+    } catch (e) {
+        console.error("Error updating agenda:", e);
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
@@ -162,16 +187,20 @@ gcc -o sb_app $(find . -name "*.c") $(sdl2-config --cflags --libs) \
 ```
 **Note**: Use `-l[package]` in the `gcc` command to include additional libraries.
 
-### Compile and Run the Daemon
+### Compile and Run the Daemon(s)
 Change to the `daemon` directory and run:
 ```bash
-./build.sh
+./build_ir_daemon.sh
+```
+and
+```bash
+./build_voice_daemon.sh
 ```
 **Note**: Will need to pip install dependencies including pyinstaller. Shouldn't be too many needed.
-**Note**: Modify build.sh to use "python3 -m PyInstaller --onefile voice_daemon.py" for linux. Case sensitive.
+**Note**: Modify the build scripts to use "python3 -m PyInstaller --onefile voice_daemon.py" for linux. Case sensitive.
 
 **Production Build Notes**:
-- Set the `DEV_BUILD` variable in `build.sh` to `0`.
+- Set the `DEV_BUILD` variable in `build_*.sh` scripts to `0`.
 - Update the `COMPILED` variable in `voice_daemon.py` to `1`.
 
 ---
@@ -196,6 +225,7 @@ sudo apt-get install flac
 ```
 
 ### Setup Jabra Speak 510 (The below config is specific to the Jabra Speak 510, other devices may require different configurations)
+
 List recording & playback devices, note device number:
 ```bash
 arecord -l (List recording devices)
@@ -238,8 +268,88 @@ Navigate to the `daemon` directory and run:
 sudo chmod +x voice_daemon
 ```
 **Note**: Modify build.sh to use "python3 -m PyInstaller --onefile voice_daemon.py" for linux. Case sensitive.
-
 ---
+
+## IR Remote Setup
+
+### Install Dependencies
+```bash
+sudo apt update
+sudo apt install lirc
+```
+
+### Configure IR
+
+Before any of this, please view the ir_daemon.py to see which controls are required to map. The names for the controls are namespaced, so ensure with the correct names.
+
+Add the following to /boot/firmware/config.txt:
+```bash
+sudo nano /boot/firmware/config.txt
+dtoverlay=gpio-ir,gpio_pin=18
+dtoverlay=gpio-ir-tx,gpio_pin=17  # Optional for transmitting IR
+```
+
+Reboot:
+```bash
+sudo reboot
+```
+
+Modify lirc_options.conf to match the following:
+```bash
+sudo nano /etc/lirc/lirc_options.conf
+driver = default
+device = /dev/lirc0
+```
+
+Restart lircd:
+```bash
+sudo systemctl restart lircd
+```
+
+Test to make sure IR is working, press a button on the remote, if you see output, it is working:
+```bash
+sudo mode2 -d /dev/lirc0
+```
+
+Create config file for remote, follow the instructions on the screen closely:
+```bash
+sudo irrecord -d /dev/lirc0 ~/lircd.conf
+```
+
+Move config file to /etc/lirc/lircd.conf:
+```bash
+sudo mv ~/lircd.conf /etc/lirc/lircd.conf
+```
+
+Restart lircd:
+```bash
+sudo systemctl restart lircd
+```
+
+Test to ensure remote is working correctly. Press a button you previously recorded, if you see output, it is working:
+```bash
+irw
+```
+
+If it doesn't work, modify the config file to remove the 0xFFFFFFFF next to each code:
+```bash
+sudo nano /etc/lirc/lircd.conf
+```
+
+```bash
+begin codes
+    KEY_POWER                0x4CB340BF 0xFFFFFFFF # <- remove the 0xFFFFFFFF for each line
+end codes
+```
+
+```bash
+sudo reboot
+```
+
+Try irw again, if it still doesn't work, google to debug further.
+```bash
+irw
+```
 
 ## Debugging
 

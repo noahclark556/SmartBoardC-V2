@@ -5,6 +5,7 @@
 
 #define COMMAND_FILE "./daemon/vdout.qdll"
 #define RESPONSE_FILE "./daemon/response.qdll"
+#define MODE_FILE "./daemon/status.qdll"
 
 #define BUFFER_SIZE 256
 #define CLEAR_FILE 1

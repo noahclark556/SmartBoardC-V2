@@ -16,7 +16,6 @@ void renderMultilineText(const char *text, int x, int y, SDL_Renderer *renderer,
 
     while (line != NULL)
     {
-
         renderText(line, x, currentY, renderer, font, color, 0, 0);
         currentY += lineHeight;
         line = strtok(NULL, "\n");
@@ -27,6 +26,7 @@ void renderMultilineText(const char *text, int x, int y, SDL_Renderer *renderer,
 
 void talkPage(SDL_Renderer *renderer)
 {
+    
     if (responseText != NULL)
     {
         renderMultilineText(responseText, 0, 200, renderer, fontSmallMedium, textColorBlack); //fontXSmall in dev, fontSmallMedium on rpi
@@ -34,5 +34,12 @@ void talkPage(SDL_Renderer *renderer)
     else
     {
         renderText("No response available", 0, 200, renderer, fontSmallMedium, textColorBlack, 0, 0);
+    }
+    if(isSpeaking == 1){
+        renderIcon(renderer, circleRedTexture, windowWidth - 60, 10, 50, 50);
+    }
+    else
+    {
+        renderIcon(renderer, circleGreenTexture, windowWidth - 60, 10, 50, 50);
     }
 }

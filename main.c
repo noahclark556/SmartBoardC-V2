@@ -9,6 +9,7 @@
 #include "./windows/dashboard.h"
 #include "./logic/network/time_config.h"
 #include "./logic/api/weather_api.h"
+#include "./logic/api/news_api.h"
 #include "./logic/rendering/animations.h"
 #include "./logic/api/database.h"
 #include "./logic/events/listeners.h"
@@ -88,6 +89,8 @@ int main(int argc, char *argv[])
     syncDatabase();
     printf("Initializing Listeners and Daemons\n");
     initListeners();
+    printf("Initializing News\n");
+    initializeNews();
 
     if (!fontLarge || !fontMedium)
     {
@@ -135,6 +138,7 @@ int main(int argc, char *argv[])
     destroyStyles();
     destroyWeatherData();
     destroyAnimations();
+    destroyNewsData();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     TTF_Quit();

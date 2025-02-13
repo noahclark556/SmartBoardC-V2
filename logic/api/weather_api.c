@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <string.h>
 #include <curl/curl.h>
+#include <cjson/cJSON.h>
 #include "weather_api.h"
 #include "../rendering/style.h"
 
@@ -78,7 +79,7 @@ WeatherData requestWeather(void)
 
     curl = curl_easy_init();
     if (curl)
-    {
+    {   // Test information / location for privacy reasons.
         curl_easy_setopt(curl, CURLOPT_URL, "https://api.open-meteo.com/v1/forecast?latitude=32.82204253623829&longitude=-79.81838788885577&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York");
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);

@@ -8,6 +8,7 @@ TTF_Font *fontXXLarge = NULL;
 TTF_Font *fontXLarge = NULL;
 TTF_Font *fontLarge = NULL;
 TTF_Font *fontMedium = NULL;
+TTF_Font *fontSmallMid = NULL;
 TTF_Font *fontSmallMedium = NULL;
 TTF_Font *fontSmall = NULL;
 TTF_Font *fontXSmall = NULL;
@@ -38,6 +39,10 @@ SDL_Texture *iconThunderTexture = NULL;
 
 SDL_Texture *agendaIconTexture = NULL;
 SDL_Texture *notesIconTexture = NULL;
+
+SDL_Texture *circleRedTexture = NULL;
+SDL_Texture *circleGreenTexture = NULL;
+
 void loadFonts(void)
 {
     fontXXLarge = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 60);
@@ -45,6 +50,7 @@ void loadFonts(void)
     fontLarge = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 30);
     fontMedium = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 25);
     fontSmallMedium = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 20);
+    fontSmallMid = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 22);
     fontSmall = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 17);
     fontXSmall = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 14);
     fontXXSmall = TTF_OpenFont("./assets/fonts/Roboto-Light.ttf", 12);
@@ -72,6 +78,8 @@ void loadIconTextures(SDL_Renderer *renderer)
     // iconThunderTexture = loadTexture("./assets/images/thunder_icon.png", renderer);
     agendaIconTexture = loadTexture("./assets/images/agenda_icon.png", renderer);
     notesIconTexture = loadTexture("./assets/images/notes_icon.png", renderer);
+    circleRedTexture = loadTexture("./assets/images/circle_red.png", renderer);
+    circleGreenTexture = loadTexture("./assets/images/circle_green.png", renderer);
 }
 
 void loadStyles(SDL_Renderer *renderer)
@@ -94,6 +102,14 @@ void destroyStyles(void)
     // iconSnowTexture = NULL;
     // SDL_DestroyTexture(iconThunderTexture);
     // iconThunderTexture = NULL;
+    SDL_DestroyTexture(agendaIconTexture);
+    agendaIconTexture = NULL;
+    SDL_DestroyTexture(notesIconTexture);
+    notesIconTexture = NULL;
+    SDL_DestroyTexture(circleRedTexture);
+    circleRedTexture = NULL;
+    SDL_DestroyTexture(circleGreenTexture);
+    circleGreenTexture = NULL;
 
     TTF_CloseFont(fontXXSmall);
     TTF_CloseFont(fontXSmall);

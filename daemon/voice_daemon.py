@@ -10,6 +10,7 @@ from datetime import datetime
 import requests
 import json
 import argparse
+import subprocess
 
 parser = argparse.ArgumentParser(description="SB Voice Daemon")
 parser.add_argument("--openai-api-key", type=str, help="OpenAI API Key")
@@ -17,6 +18,7 @@ parser.add_argument("--google-api-key", type=str, help="Google TTS API Key")
 parser.add_argument("--db-read-function", type=str, help="URL for the database read function")
 parser.add_argument("--db-update-function", type=str, help="URL for the database update function")
 parser.add_argument("--db-user-id", type=str, help="Id of the user to read from / name of document in users collection")
+parser.add_argument("--db-agenda-function", type=str, help="URL for the database agenda update function")
 args = parser.parse_args()
 
 
@@ -29,6 +31,7 @@ url = f'https://texttospeech.googleapis.com/v1/text:synthesize?key={args.google_
 READ_FUNCTION_URL = args.db_read_function
 UPDATE_FUNCTION_URL = args.db_update_function
 DB_USER_ID = args.db_user_id
+UPDATE_AGENDA_FUNCTION_URL = args.db_agenda_function
 inSpeechMode = False
 tospeak = []
 speaking = False
@@ -37,26 +40,47 @@ output_file = "vdout.qdll"
 fullresponse = ""
 response_output_file = "response.qdll"
 weather_data_file = "wd.qdll"
-p_threshold = .8
+status_file = "status.qdll"
+p_threshold = .9
 # Line break after x characters
 # 80 in dev, 100 on rpi
 newline_padding = 80
 openCommands = ["hey smart board", "hey smartboard", "a smartboard", "a smart board", "ace hardware", "smartboard", "smart board"]
 closeCommands = ["nevermind", "never mind", "stop", "go back"]
+cutoffCommands = ["stop", "stop talking", "nevermind", "never mind"];
 weatherData = []
-max_history = 15
+max_history = 20
 trimmed_history = []
+streaming = False
+cutoffSpeech = False
 
 if COMPILED:
     print(f"{prepend} Using compiled output file")
     output_file = "./daemon/vdout.qdll"
     response_output_file = "./daemon/response.qdll"
     weather_data_file = "./daemon/wd.qdll"
+    status_file = "./daemon/status.qdll"
 else:
     print(f"{prepend} Using uncompiled output file")
     output_file = "vdout.qdll"
     response_output_file = "response.qdll"
     weather_data_file = "wd.qdll"
+    status_file = "status.qdll"
+
+def set_volume(vol):
+    print(f"Setting volume to {vol}")
+    voli = int(vol)
+    if voli > 100:
+        vol = "100"
+    if voli < 0:
+        voli = "100"
+    try:
+        # Set volume to 100%
+        subprocess.run(["amixer", "cset", "numid=4", f"{voli}%"], check=True)
+        speak(f"Volume set to {vol}!")
+    except subprocess.CalledProcessError as e:
+        speak("There was an error setting the volume.")
+        print(f"Error setting volume to {vol}: {e}")
 
 def delete_output_file(output_file):
     if os.path.isfile(output_file):  # Check if the file exists
@@ -86,7 +110,34 @@ def commit_update_history(new_history):
 def update_history(new_history):
     print(f"Updating history")
     threading.Thread(target=commit_update_history, args=(new_history,)).start()
+    trimmed_history.append(new_history)
     print(f"History updated:")
+
+def commit_update_agenda(agenda_data):
+    agenda_json = json.loads(agenda_data)
+
+    headers = {"Content-Type": "application/json"}
+    data = json.dumps({
+        "userId": DB_USER_ID,
+        "time": agenda_json.get("time"),
+        "text": agenda_json.get("text"),
+        "date": agenda_json.get("date")
+    })
+
+    try:
+        response = requests.post(UPDATE_AGENDA_FUNCTION_URL, headers=headers, data=data)
+        response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
+        
+        json_data = response.json()
+        return json_data  # Returns the updated history response
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error updating history: {e}")
+        return None
+
+def update_agenda(agenda_data):
+    threading.Thread(target=commit_update_agenda, args=(agenda_data,)).start()
+    commit_update_agenda(agenda_data)
 
 def parse_database_data():
     global trimmed_history
@@ -117,7 +168,6 @@ def initDatabase():
     except Exception as e:
         print(f"An error parsing database data: {e}")
 
-
 def speak(text):
     global speaking
     # Request payload
@@ -145,6 +195,7 @@ def speak(text):
 
             if audio_content:
                 speaking = True
+                setSpeaking()
                 # Decode Base64 to binary MP3 data
                 audio_data = base64.b64decode(audio_content)
 
@@ -157,6 +208,7 @@ def speak(text):
                 play_obj = wave_obj.play()
                 play_obj.wait_done()  # Wait for playback to finish
                 speaking = False
+                setSpeaking()
             else:
                 print("No audio content received")
         else:
@@ -185,6 +237,8 @@ def speakListener():
         speak(tospeak.pop(0))
 
 def isSpeaking():
+    if streaming:
+        return True
     if len(tospeak) == 0 and speaking:
         return True
     if len(tospeak) == 0 and not speaking:
@@ -202,6 +256,14 @@ def enterSilentMode():
         f.close()
     print("Silent mode enabled")
     inSpeechMode = False
+
+def setSpeaking(override=False): # if true, set speaking to false
+    speakString = "false"
+    if isSpeaking() and not override:
+        speakString = "true"
+    with open(status_file, "w") as f:
+        f.write(speakString)
+        f.close()
 
 def goBackListener():
     if isSpeaking():
@@ -222,12 +284,32 @@ def checkIsWeather(command):
     return False
 
 def stream_gpt4_response(command):
+    global streaming
+    global cutoffSpeech
     global tospeak
     global fullresponse
+
+    cutoffSpeech = False
+    streaming = True
     fullresponse = ""
     formatted_date_time = datetime.now().strftime("%B %d, %Y %I:%M%p")
+    agenda_date_format = datetime.now().strftime("%Y-%m-%d")
     isWeather = checkIsWeather(command)
     weatherMessage = ""
+    isAgenda = "agenda" in command.lower()
+    agendaMessage = ""
+    if isAgenda:
+        print("Agenda mode")
+        agendaMessage = f"""The user is asking you to update their agenda. 
+Please only return a valid json object that contains todays date {agenda_date_format} formatted like the below example, the specified time and the agenda text, formatted like this:
+{{
+    "date": "{agenda_date_format}",
+    "time": "0800",
+    "text": "Update the agenda for 10:00 AM"
+}}. Ensure the json object is valid and do not return anything else with it.
+"""
+    else:
+        agendaMessage = ""
     if isWeather and len(weatherData) > 0:
       weatherMessage = f'This is the weather data for the week, including today\'s data, temperatures are in Fahrenheit [{weatherData}]'
     else:
@@ -243,7 +325,7 @@ Today's date is {formatted_date_time}. Depending on what your question is, i may
 an estimate based on the temperatures before and after it. The weather data object contains each day, and the hours for each day. Each hour contains the Temperature in Fahrenheit and the condition description. I may also be given the
 current temperature and weather condition. If I did not receive weather data, I will not include it in my response. I will not make up any data unless asked to. Do not say that you are an AI, just respond as if you are a human. If you can't answer something, just say you will get back to it later."""
     
-    user_prompt = f"This is what the user said: [{command}]. This is the chat history: [{str(trimmed_history)}]. {weatherMessage}"
+    user_prompt = f"This is what the user said: [{command}]. {agendaMessage}. This is the chat history: [{str(trimmed_history)}]. {weatherMessage}"
 
 
     try:
@@ -262,17 +344,28 @@ current temperature and weather condition. If I did not receive weather data, I 
         stream=True)
 
         print("Response:")
+        
         # Process the streamed response
         for chunk in response:
             if chunk.choices[0].delta.content is not None:
                 current += chunk.choices[0].delta.content
                 fullresponse += chunk.choices[0].delta.content
+                if cutoffSpeech:
+                    cutoffSpeech = False
+                    tospeak = []
+                    break
                 if eos(chunk.choices[0].delta.content):
                     tospeak.append(current)
-                    speakListener()
+                    if not isAgenda:
+                        speakListener()
                     current = ""
         print("\nStream finished.")
+        streaming = False
+        setSpeaking()
         update_history(f"(user_speech:{command})(ai_response:{fullresponse})@{formatted_date_time}")
+        if isAgenda:
+            update_agenda(fullresponse)
+            speak("Your agenda has been updated")
         goBackListener()
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -300,14 +393,29 @@ def getWeatherData():
     except Exception as e:
         print(f"An error occurred getting weather data: {e}")
 
+def startGPTThread(command):
+    try:
+        threading.Thread(target=stream_gpt4_response, args=(command,)).start()
+    except Exception as e:
+        print(f"An error occurred getting weather data: {e}")
+
+def isInt(s):
+    try:
+        int(s)  # Try to convert the string to an integer
+        return True  # If successful, return True
+    except ValueError:
+        return False  # If a ValueError is raised, return False
+
 def start_voice_daemon():
     global inSpeechMode
+    global cutoffSpeech
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
     recognizer.pause_threshold = p_threshold
     delete_output_file(output_file)
     getWeatherData()
     initDatabase()
+    setSpeaking(True) # reset speaking state
 
     print(f"{prepend} Starting voice daemon")
     with mic as source:
@@ -320,11 +428,18 @@ def start_voice_daemon():
                 print(f"{prepend} Command received: {command}")
                 if inSpeechMode:
                     if isSpeaking():
+                        print(command)
+                        if any(cmd in command.lower() for cmd in cutoffCommands):
+                            print(f"{prepend} Cutting off speech")
+                            cutoffSpeech = True
                         continue
                     if any(cmd in command.lower() for cmd in closeCommands):
                         enterSilentMode()
                         continue
-                    stream_gpt4_response(command)
+                    if "volume" in command.lower() and len(command.split(" ")) > 2 and isInt(command.split(" ")[2]) and len(command.lower()) < 20:
+                        set_volume(command.split(" ")[2])
+                        continue
+                    startGPTThread(command)
                 if not inSpeechMode and any(cmd in command.lower() for cmd in openCommands):
                     with open(output_file, "w") as f:
                         f.write("speechmode")
@@ -344,6 +459,7 @@ def start_voice_daemon():
 
 
 start_voice_daemon()
+#startGPTThread("Please update my agenda for 9:00 AM to attend my school teacher meeting.")
 
 # For testing
 # inSpeechMode = True

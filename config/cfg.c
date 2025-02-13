@@ -12,8 +12,11 @@ char timeText[32] = "2:52 pm";
 char dateText[32] = "Fri, Jan 2";
 char *quoteText = "Any man who knows a thing, knows he knows nothing at all.";
 int quoteIndex = 0;
+int newsIndex = 1;
+int newsDataIndex = 0;
 int quoteAnimationInterval = QUOTE_ANIMATION_INTERVAL;
 int currentWindow = 0;
+int isSpeaking = 0;
 
 const char *allQuotes[QUOTE_COUNT] = {
     "Any man who knows a thing, knows he knows nothing at all.",
