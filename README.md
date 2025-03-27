@@ -42,7 +42,7 @@ This project has been ongoing and is considered to be Version 2 of the Smart Boa
 - [ ] In the "/config" directory, you can modify the file called "cfg.h" to change the default user name, or other configurations:
 but this is not required for the project to boot. I recommend adjusting that file once you get the project running.
 
-- [ ] Create two google cloud functions, linked to a firebase database, using the following:
+- [ ] Create three google cloud functions, linked to a firestore database, using the following:
 ```
 import { onRequest } from "firebase-functions/v2/https";
 import { db } from './admin'; // Your firestore admin initialization
